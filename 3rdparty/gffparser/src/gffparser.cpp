@@ -567,12 +567,12 @@ gff_postition_t &gff_postition_t::operator=(const gff_postition_t &pos)
 
 bool gff_postition_t::in(uint64_t pos) const
 {
-    return start >= pos && end <= pos;
+    return start <= pos && end >= pos;
 }
 
 bool gff_postition_t::in(const std::string &sid, uint64_t pos) const
 {
-    return seqid == sid && start >= pos && end <= pos;
+    return seqid == sid && start <= pos && end >= pos;
 }
 
 bool gff_postition_t::intersect(uint64_t spos, uint64_t epos) const
