@@ -23,8 +23,9 @@ void usage(const std::string &program) {
               << "\n         -seqid N #sequence id column number (default 1)"
               << "\n         -pos N #position column number (default 2)"
               << "\n         -endpos N #(optional) end position column number (info:<name> for vcf)"
-              << "\n         -where <par1>...<parN> #(optional) select from gff parameter (format <coltype>[:<attrname>]:<value>"
-              << "\n         -add <par1>...<parN> # fields to add to output file (format: <coltype>[:<attrname>])"
+              << "\n         -where <par1>...<parN> #(optional) select from gff parameter (format <coltype>[:<attrname>]:<value>)"
+              << "\n         -add <par1>...<parN> #fields to add to output file (format: <coltype>[:<attrname>])"
+              << "\n         -ext {intersect,length} #add extended information ('intersect' - intersect percent)"
               << "\n"
               << std::endl;
     std::cerr << "USAGE EXAMPLE: "
@@ -72,7 +73,10 @@ enum class select_column_t {
     score,
     strand,
     phase,
-    attr
+    attr,
+
+    intersect,
+    length
 };
 
 struct selectpar_t {
@@ -89,6 +93,8 @@ struct selectpar_t {
         if(msg == "strand") return select_column_t::strand;
         if(msg == "phase") return select_column_t::phase;
         if(msg == "attr") return select_column_t::attr;
+        if(msg == "intersect") return select_column_t::intersect;
+        if(msg == "length") return select_column_t::length;
         return select_column_t::noval;
     }
     static std::string colname_by_num(select_column_t type) {
@@ -103,6 +109,8 @@ struct selectpar_t {
         case select_column_t::strand: return "strand";
         case select_column_t::phase:  return "phase";
         case select_column_t::attr:   return "attr";
+        case select_column_t::intersect:   return "intersect";
+        case select_column_t::length:   return "length";
         }
         return "noval";
     }
@@ -168,6 +176,16 @@ finput_type_t check_extension(const std::string &filepath, bool &gzipped)
         }
     }
     return finput_type_t::fi_err;
+}
+
+std::string intersect_percent(uint64_t s1, uint64_t e1, uint64_t s2, uint64_t e2)
+{
+    int64_t ival = std::min(e1, e2) - std::max(s1, s2) + 1;
+    if(ival <= 0) return "0";
+    int64_t l1 = e1 - s1 + 1;
+    if(l1 == 0) throw std::runtime_error("gel length error (=0)");
+    int64_t p = (ival * 1000) / l1;
+    return std::to_string(p/10) + "." + std::to_string(p%10);
 }
 
 int main(int argc, char **argv)
@@ -270,6 +288,19 @@ int main(int argc, char **argv)
                 ftype = finput_type_t::fi_err;
             continue;
         }
+        if(p.equal("ext")) {
+            for(const auto &v: p.values) {
+                if(v == "intersect") {
+                    add.push_back(selectpar_t("intersect", true));
+                    continue;
+                }
+                if(v == "length") {
+                    add.push_back(selectpar_t("length", true));
+                    continue;
+                }
+            }
+            continue;
+        }
     }
     if(ftype == finput_type_t::fi_unk)
         ftype = check_extension(ifpath, gzipped);
@@ -357,6 +388,10 @@ int main(int argc, char **argv)
         case select_column_t::strand:
         case select_column_t::phase:
             return noarg_error("-where " + w.orig(), inopts.program_name());
+        case select_column_t::intersect:
+        case select_column_t::length:
+            // ext field, nothing to do
+            break;
         }
     }
 
@@ -383,6 +418,8 @@ int main(int argc, char **argv)
                 case select_column_t::strand: to.push_back(std::to_string(i->strand)); break;
                 case select_column_t::phase: to.push_back(std::to_string(i->phase)); break;
                 case select_column_t::attr: to.push_back(i->get_attr(a.attrname).get_string()); break;
+                case select_column_t::intersect: to.push_back(intersect_percent(pos_ui, endpos_ui, i->position.start, i->position.end)); break;
+                case select_column_t::length: to.push_back(std::to_string(endpos_ui-pos_ui+1)); break;
                 }
             }
         }

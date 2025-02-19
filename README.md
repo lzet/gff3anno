@@ -14,8 +14,9 @@ gff3anno-linux-x86_64
 -seqid N #sequence id column number (default 1)
 -pos N #position column number (default 2)
 -endpos N #(optional) end position column number (info:<name> for vcf)
--where <par1>...<parN> #(optional) select from gff parameter (format <coltype>[:<attrname>]:<value>
+-where <par1>...<parN> #(optional) select from gff parameter (format <coltype>[:<attrname>]:<value>)
 -add <par1>...<parN> # fields to add to output file (format: <coltype>[:<attrname>])
+-ext {intersect,length} #add extended information ('intersect' - intersect percent)
 ```
 
 ## USAGE EXAMPLE:
