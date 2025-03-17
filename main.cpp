@@ -6,15 +6,18 @@
 #include <regex>
 
 enum class finput_type_t {
-    fi_err = -2, fi_unk = -1, fi_bed = 0, fi_vcf = 1
+    fi_err = -2, fi_unk = -1, fi_bed = 0, fi_vcf = 1, fi_export
 };
 
 void usage(const std::string &program) {
+    std::cerr << "VERSION: "
+              << VERSION
+              << std::endl;
     std::cerr << "USAGE: "
               << "\n         gff column types: seqid, source, type, pos, endpos, score, strand, phase, attr\n"
               << "\n         " << program
               << "\n         -gff [path/to/file.gff3] #input gff3 file"
-              << "\n         -type {bed,vcf} #input file type (default: get from extension)"
+              << "\n         -type {bed,vcf,export} #input file type (default: get from extension)"
               << "\n         -skip N #(optional) for bed-file only, skip lines (default 0)"
               << "\n         -header N #for bed-file only, header line num (default -1, no header)"
               << "\n         -threads N #max threads (default 4)"
@@ -35,9 +38,9 @@ void usage(const std::string &program) {
               << std::endl;
 }
 
-int arg_error(const std::string &parname, const std::string &program) {
+int arg_error(const std::string &parname, const std::string &program, const std::string &msg = "parameter must be set") {
     usage(program);
-    std::cerr << "'" << parname << "' parameter must be set" << std::endl;
+    std::cerr << "'" << parname << "' " << msg << std::endl;
     return 1;
 }
 
@@ -284,6 +287,8 @@ int main(int argc, char **argv)
                 ftype = finput_type_t::fi_bed;
             else if(p.values.size() == 1 && p.values.front() == "vcf")
                 ftype = finput_type_t::fi_vcf;
+            else if(p.values.size() == 1 && p.values.front() == "export")
+                ftype = finput_type_t::fi_export;
             else
                 ftype = finput_type_t::fi_err;
             continue;
@@ -310,8 +315,10 @@ int main(int argc, char **argv)
         return arg_error("-gff", inopts.program_name());
     if(ofpath == ifpath)
         return arg_error("-in/-out same", inopts.program_name());
-    if(!iptr)
+    if(ftype != finput_type_t::fi_export && !iptr)
         return arg_error("-in", inopts.program_name());
+    if(ftype == finput_type_t::fi_export && iptr)
+        return arg_error("-in,-export", inopts.program_name(), "incompatible parameters");
     if(!optr)
         return arg_error("-out", inopts.program_name());
     if(nproc < 0)
@@ -322,6 +329,7 @@ int main(int argc, char **argv)
         return arg_error("-pos", inopts.program_name());
     if(ftype == finput_type_t::fi_err || ftype == finput_type_t::fi_unk)
         return arg_error("-type", inopts.program_name());
+
     for(auto &w: where) {
         auto er = w.init();
         if(!er.empty())
@@ -400,7 +408,9 @@ int main(int argc, char **argv)
     uint64_t endpos_ui = 0;
 
     auto getansw = [&]() -> std::vector< std::vector<std::string> > {
-        auto items = gff.get_by(type_s, attr_v, gffparser::gff_postition_t(*seqid_s, pos_ui, endpos_ui));
+        auto items = seqid_s ?
+                        gff.get_by(type_s, attr_v, gffparser::gff_postition_t(*seqid_s, pos_ui, endpos_ui)) :
+                        gff.get_by(type_s, attr_v);
         std::vector< std::vector<std::string> > addfields;
         addfields.resize(add.size());
         for(const auto &i: items) {
@@ -533,6 +543,35 @@ int main(int argc, char **argv)
                     ost << "\n";
                 }
                 std::string ost_s = ost.str();
+                optr->write(ost_s.c_str(), ost_s.size());
+            }
+        }
+        else if(ftype == finput_type_t::fi_export) {
+            std::ostringstream ost;
+            for(std::size_t i = 0; i < add.size(); ++i) {
+                if(i) ost << "\t";
+                else ost << "#";
+                ost << add[i].orig();
+            }
+            ost << "\n";
+            std::string ost_s = ost.str();
+            optr->write(ost_s.c_str(), ost_s.size());
+
+            auto af = getansw();
+            std::size_t lines = 0;
+            for(const auto &a: af) {
+                if(!lines) lines = a.size();
+                if(lines != a.size())
+                    throw std::runtime_error("gff result error (different size in columns)");
+            }
+            for(std::size_t l = 0; l < lines; ++l) {
+                ost = std::ostringstream();
+                for(std::size_t i = 0; i < add.size(); ++i) {
+                    if(i) ost << "\t";
+                    ost << af[i][l];
+                }
+                ost << "\n";
+                ost_s = ost.str();
                 optr->write(ost_s.c_str(), ost_s.size());
             }
         }
