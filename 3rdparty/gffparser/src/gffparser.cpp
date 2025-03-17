@@ -54,6 +54,62 @@ std::vector<std::string> gffparser::utils::get_fields(const std::string &line, c
     return r;
 }
 
+std::vector< std::pair<std::string, std::string> > utils::get_subfields(const std::string &line, char delim, char subdelim, std::string &error, bool csv_string_format)
+{
+    std::vector< std::pair<std::string, std::string> > r;
+    const std::string multidelim = {delim, subdelim};
+    auto it = line.find_first_of(multidelim);
+    size_t prev = 0;
+    while(it != std::string::npos) {
+        std::string part = line.substr(prev, it-prev);
+        if(!part.empty()) {
+            if(line[it] == delim) { // сразу разделитель, нет значения, напр 'par1<delim>par2<delim>...'
+                r.push_back({part, ""});
+            }
+            else { // разделитель параметр/значение, 'par1<subdelim>val1<delim>par2<delim>...'
+                if(it == (line.length()-1)) { // конец строки (par1<subdelim>\n)
+                    r.push_back({part, ""});
+                }
+                else if(line[it+1] == delim) { // конец параметра без значения (par1<subdelim><delim>\n)
+                    r.push_back({part, ""});
+                    it += 1;
+                }
+                else if(csv_string_format && line[it+1] == '"') { // начало параметра строки (par1<subdelim>")
+                    auto nextquote = line.find('"', it+2);
+                    if(nextquote == std::string::npos) { // ошибка парсинга
+                        error = "string format in parameter error (pos=" + std::to_string(it+1) + ")";
+                        return r;
+                    }
+                    std::string subpart = line.substr(it+2, nextquote-it-2);
+                    r.push_back({part, subpart});
+                    it = nextquote;
+                    if(it != (line.length()-1)) {
+                        if(line[it+1] == delim)
+                            ++it;
+                        else {
+                            error = "string format in parameter error (pos=" + std::to_string(it+1) + ")";
+                            return r;
+                        }
+                    }
+                }
+                else {
+                    auto nextdelim = line.find(delim, it+1);
+                    if(nextdelim == std::string::npos) {
+                        r.push_back({part, line.substr(it+1)});
+                    }
+                    else {
+                        r.push_back({part, line.substr(it+1, nextdelim - it - 1)});
+                        it = nextdelim;
+                    }
+                }
+            }
+        }
+        prev = it + 1;
+        it = line.find_first_of(multidelim, prev);
+    }
+    return r;
+}
+
 std::string gffparser::utils::trim(const std::string &str)
 {
     auto s = std::find_if_not(str.begin(), str.end(), [](int c){return std::isspace(c);});
@@ -210,15 +266,14 @@ gff_data_t gff_parser_t::parse_line(const std::string &line, std::string &error,
         linedata.phase = phase_s[0];
     }
 
-    auto attrlist = utils::get_fields(utils::trim(fields[(int)gff_field_type_t::ATTRIBUTES]), ';', false);
+    auto attrlist = utils::get_subfields(utils::trim(fields[(int)gff_field_type_t::ATTRIBUTES]), ';', '=', error, true);
+    if(!error.empty()) {
+        error = "line#" + std::to_string(linenum) + " " + error;
+        return gff_data_t();
+    }
     for(const auto &attr: attrlist) {
-        auto nmval = utils::get_fields(attr, '=', false);
-        if(nmval.size() != 2) {
-            error = "line#" + std::to_string(linenum) + " wrong 'attributes' field format";
-            return gff_data_t();
-        }
-        if(onlystrinval) linedata.set_attr(nmval[0], nmval[1]);
-        else linedata.set_attr_auto(nmval[0], nmval[1]);
+        if(onlystrinval) linedata.set_attr(attr.first, attr.second);
+        else linedata.set_attr_auto(attr.first, attr.second);
     }
     return linedata;
 }

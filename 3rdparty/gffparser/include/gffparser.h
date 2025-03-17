@@ -190,6 +190,7 @@ namespace utils {
 bool check_no_data(const std::string &str);
 std::string join_strmap(const std::unordered_map<std::string, std::string> &strmap);
 std::vector<std::string> get_fields(const std::string &line, char delim, bool csv_string_format);
+std::vector< std::pair<std::string, std::string> > get_subfields(const std::string &line, char delim, char subdelim, std::string &error, bool csv_string_format);
 std::string trim(const std::string &str);
 }
 }
