@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(gff3anno LANGUAGES CXX)
+project(gff3anno LANGUAGES CXX VERSION 0.2)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+add_definitions(-DVERSION=\"${PROJECT_VERSION}\")
 
 add_subdirectory(
     3rdparty/gffparser
